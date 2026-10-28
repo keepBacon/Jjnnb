@@ -44,9 +44,11 @@ by Nebula Softworks
 
 ]]
 
-local Release = "Prerelease Beta 6.1"
+local Release = "Luna Jjnnb RootFix 2026.10.28-r1"
+local JJN_BuildId = "jjnnb-luna-rootfix-20261028-r1"
 
 local Luna = { 
+	BuildId = JJN_BuildId,
 	Folder = "Luna", 
 	Options = {}, 
 	ThemeGradient = ColorSequence.new{ColorSequenceKeypoint.new(0.00, Color3.fromRGB(117, 164, 206)), ColorSequenceKeypoint.new(0.50, Color3.fromRGB(123, 201, 201)), ColorSequenceKeypoint.new(1.00, Color3.fromRGB(224, 138, 175))} 
@@ -1658,7 +1660,7 @@ local function BlurModule(Frame)
 	local MTREL = "Glass"
 	local binds = {}
 	local root = Instance.new('Folder', camera)
-	root.Name = 'LunaBlur'
+	root.Name = 'LunaBlur-Jjnnb'
 
 	local gTokenMH = 99999999
 	local gToken = math.random(1, gTokenMH)
@@ -1779,7 +1781,7 @@ local function BlurModule(Frame)
 		return binds[frame].parts
 	end
 
-	local uid = GenUid()
+	local uid = "LunaBlur-" .. HttpService:GenerateGUID(false)
 	local parts = {}
 	local f = Instance.new('Folder', root)
 	f.Name = frame.Name
@@ -1842,15 +1844,25 @@ local function BlurModule(Frame)
 	UpdateOrientation(true)
 	-- Hide camera Glass geometry and depth effect when the UI minimizes.
 	local active = true
+	local destroyed = false
 	local function SetVisible(_, enabled)
+		if destroyed then return end
 		active = enabled == true
 		f.Parent = active and root or nil
 		DepthOfField.Enabled = active
 	end
+	local function Destroy()
+		if destroyed then return end
+		destroyed = true
+		active = false
+		pcall(function() RunService:UnbindFromRenderStep(uid) end)
+		root:Destroy()
+		DepthOfField:Destroy()
+	end
 	RunService:BindToRenderStep(uid, 2000, function(...)
-		if active then UpdateOrientation(...) end
+		if active and not destroyed and frame.Parent then UpdateOrientation(...) end
 	end)
-	return {SetVisible = SetVisible}
+	return {SetVisible = SetVisible, Destroy = Destroy}
 end
 
 local function unpackt(array : table)
@@ -1927,23 +1939,47 @@ elseif not isStudio then
 	LunaUI.Parent = CoreGui
 end
 
-if gethui then
-	for _, Interface in ipairs(gethui():GetChildren()) do
-		if Interface.Name == LunaUI.Name and Interface ~= LunaUI then
-			Hide(Interface.SmartWindow)
-			Interface.Enabled = false
-			Interface.Name = "Luna-Old"
-		end
-	end
-elseif not isStudio then
-	for _, Interface in ipairs(CoreGui:GetChildren()) do
-		if Interface.Name == LunaUI.Name and Interface ~= LunaUI then
-			Hide(Interface.SmartWindow)
-			Interface.Enabled = false
-			Interface.Name = "Luna-Old"
+-- Remove UI instances of older Jjnnb/Luna builds before a new preview starts.
+-- Calling Hide on an old instance only made it invisible and left render loops
+-- and camera glass parts running.
+local JJN_GlobalEnv = nil
+if type(getgenv) == "function" then
+	local ok, env = pcall(getgenv)
+	if ok and type(env) == "table" then JJN_GlobalEnv = env end
+end
+if JJN_GlobalEnv and type(JJN_GlobalEnv.__JjnnbLunaCleanup) == "function" then
+	pcall(JJN_GlobalEnv.__JjnnbLunaCleanup)
+	JJN_GlobalEnv.__JjnnbLunaCleanup = nil
+end
+
+local function RemoveOldLunaGui(parent)
+	if not parent then return end
+	for _, candidate in ipairs(parent:GetChildren()) do
+		if candidate ~= LunaUI and candidate:IsA("ScreenGui") and
+			(candidate.Name == LunaUI.Name or candidate.Name == "Luna-Old" or candidate:FindFirstChild("LunaMinimizedLauncher")) then
+			candidate:Destroy()
 		end
 	end
 end
+if not isStudio then
+	if type(gethui) == "function" then
+		local ok, container = pcall(gethui)
+		if ok then RemoveOldLunaGui(container) end
+	end
+	RemoveOldLunaGui(CoreGui)
+	RemoveOldLunaGui(CoreGui:FindFirstChild("RobloxGui"))
+	-- Only remove geometry/effects under Luna-specific names; do not touch other UIs.
+	local cam = workspace.CurrentCamera
+	if cam then
+		for _, part in ipairs(cam:GetChildren()) do
+			if part.Name == "LunaBlur" or part.Name == "LunaBlur-Jjnnb" then part:Destroy() end
+		end
+	end
+	for _, effect in ipairs(game:GetService("Lighting"):GetChildren()) do
+		if effect:IsA("DepthOfFieldEffect") and effect.Name:match("^DPT_%d+$") then effect:Destroy() end
+	end
+end
+print("[Luna UI] " .. JJN_BuildId .. " loaded")
 
 LunaUI.Enabled = false
 LunaUI.SmartWindow.Visible = false
@@ -2330,39 +2366,82 @@ end
 -- reopening the UI. This changes only the minimized presentation.
 local LunaFloatingLauncher = nil
 local LunaBlurController = nil
+local LunaDestroyed = false
+local LunaMinimized = false
+local LunaTransitionToken = 0
+local LunaMinimizeReturnPosition = nil
+local LunaOriginalMainBackground = 0.2
+
+local function AnimateLauncher(launcher, appears)
+	local scale = launcher:FindFirstChild("JJNLaunchScale")
+	if not scale then
+		scale = Instance.new("UIScale")
+		scale.Name = "JJNLaunchScale"
+		scale.Scale = 1
+		scale.Parent = launcher
+	end
+	if appears then
+		scale.Scale = 0.86
+		launcher.BackgroundTransparency = 0.72
+		launcher.Visible = true
+		TweenService:Create(scale, TweenInfo.new(0.28, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Scale = 1}):Play()
+		TweenService:Create(launcher, TweenInfo.new(0.28, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {BackgroundTransparency = 0.17}):Play()
+	else
+		launcher.Visible = false
+		scale.Scale = 1
+	end
+end
 
 local function Minimize(Window)
+	if LunaDestroyed or LunaMinimized then return end
 	CalculateWindowSizes()
 	local button = LunaFloatingLauncher
 	if not button then return end
+	LunaMinimized = true
+	LunaTransitionToken += 1
 	local viewport = Camera.ViewportSize
 	local side = MinSize.X.Offset
-	local p = Window.AbsolutePosition
+	local oldPosition = Window.AbsolutePosition
+	LunaMinimizeReturnPosition = Window.Position
 	button.Size = MinSize
 	button.Position = UDim2.fromOffset(
-		math.clamp(p.X, 12, math.max(12, viewport.X - side - 12)),
-		math.clamp(p.Y - 18, 20, math.max(20, viewport.Y - side - 12))
+		math.clamp(oldPosition.X, 12, math.max(12, viewport.X - side - 12)),
+		math.clamp(oldPosition.Y - 20, 20, math.max(20, viewport.Y - side - 12))
 	)
-	-- Original main window and its ShadowHolder no longer draw at all.
 	if LunaBlurController then LunaBlurController:SetVisible(false) end
 	Window.Visible = false
 	local shadow = Window.Parent:FindFirstChild("ShadowHolder")
 	if shadow then shadow.Visible = false end
-	button.Visible = true
+	if dragBar then dragBar.Visible = false end
+	AnimateLauncher(button, true)
 end
 
 local function Maximise(Window)
-	if LunaFloatingLauncher then LunaFloatingLauncher.Visible = false end
-	Window.Size = MainSize
+	if LunaDestroyed or not LunaMinimized then return end
+	LunaMinimized = false
+	LunaTransitionToken += 1
+	if LunaFloatingLauncher then AnimateLauncher(LunaFloatingLauncher, false) end
+	CalculateWindowSizes()
+	Window.Size = UDim2.new(MainSize.X.Scale, math.floor(MainSize.X.Offset * 0.95), MainSize.Y.Scale, math.floor(MainSize.Y.Offset * 0.95))
+	Window.BackgroundTransparency = 1
 	Window.Visible = true
 	Window.Controls.Visible = true
 	Window.Controls.ToggleSize.ImageLabel.Image = "rbxassetid://10137941941"
 	Window.Elements.Visible = true
 	Window.Navigation.Visible = true
 	local shadow = Window.Parent:FindFirstChild("ShadowHolder")
-	if shadow then shadow.Size = MainSize; shadow.Visible = true end
+	if shadow then
+		shadow.Size = MainSize
+		shadow.Visible = true
+	end
 	if LunaBlurController then LunaBlurController:SetVisible(true) end
-	ClampLunaWindowPosition(Window)
+	if LunaMinimizeReturnPosition then Window.Position = LunaMinimizeReturnPosition end
+	local currentToken = LunaTransitionToken
+	TweenService:Create(Window, TweenInfo.new(0.32, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = MainSize, BackgroundTransparency = LunaOriginalMainBackground}):Play()
+	task.delay(0.34, function()
+		if LunaDestroyed or currentToken ~= LunaTransitionToken or LunaMinimized then return end
+		ClampLunaWindowPosition(Window)
+	end)
 end
 
 function Luna:CreateWindow(WindowSettings)
@@ -2771,10 +2850,10 @@ function Luna:CreateWindow(WindowSettings)
 
 	TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {BackgroundTransparency = 0.2, Size = MainSize}):Play()
 	TweenService:Create(Main.Parent.ShadowHolder, TweenInfo.new(0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = MainSize}):Play()
-	-- Shift the original window upward by 18px, preserving the upper inset.
+	-- Raise initial placement while keeping the full window in the viewport.
 	task.delay(0.55, function()
 		if Main.Parent and not Window.Size then
-			Main.Position = Main.Position + UDim2.fromOffset(0, -18)
+			Main.Position = Main.Position + UDim2.fromOffset(0, -28)
 			ClampLunaWindowPosition(Main)
 		end
 	end)
@@ -7091,14 +7170,21 @@ function Luna:CreateWindow(WindowSettings)
 end
 
 function Luna:Destroy()
-	Main.Visible = false
-	for _, Notification in ipairs(Notifications:GetChildren()) do
-		if Notification.ClassName == "Frame" then
-			Notification.Visible = false
-			Notification:Destroy()
-		end
+	if LunaDestroyed then return end
+	LunaDestroyed = true
+	LunaTransitionToken += 1
+	if LunaBlurController then LunaBlurController:Destroy(); LunaBlurController = nil end
+	if LunaFloatingLauncher then LunaFloatingLauncher.Visible = false end
+	if LunaUI then LunaUI:Destroy() end
+	if JJN_GlobalEnv and JJN_GlobalEnv.__JjnnbLunaCleanup then
+		JJN_GlobalEnv.__JjnnbLunaCleanup = nil
 	end
-	LunaUI:Destroy()
+end
+
+if JJN_GlobalEnv then
+	JJN_GlobalEnv.__JjnnbLunaCleanup = function()
+		Luna:Destroy()
+	end
 end
 
 if (getgenv and not getgenv().ConfirmLuna) or (not getgenv) then
