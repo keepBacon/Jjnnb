@@ -2413,8 +2413,8 @@ function Luna:CreateWindow(WindowSettings)
 	local ContentLayout = Kwargify({
 		Columns = 2,
 		MinColumnWidth = 235,
-		ColumnGap = 12,
-		RowGap = 7,
+		ColumnGap = 14,
+		RowGap = 10,
 	}, WindowSettings.ContentLayout or {})
 
 	local function CreateContentFlow(parent, name, layoutOrder)
@@ -4437,7 +4437,7 @@ function Luna:CreateWindow(WindowSettings)
 
 				ColorPickerV.Color = Color3ToHex(ColorPickerSettings.Color)
 
-				local closedsize = UDim2.new(0, 75, 0, 22)
+				local closedsize = UDim2.fromOffset(72, 24)
 				local openedsize = UDim2.new(0, 219, 0, 129)
 
 				local ColorPicker = Elements.Template.ColorPicker:Clone()
@@ -4450,7 +4450,7 @@ function Luna:CreateWindow(WindowSettings)
 				ColorPicker.Title.Text = ColorPickerSettings.Name
 				ColorPicker.Visible = true
 				SectionMount:Item(ColorPicker)
-				ColorPicker.Size = UDim2.new(1.042, -25,0, 38)
+				ColorPicker.Size = UDim2.new(1, -8, 0, 46)
 				Background.Size = closedsize
 				Display.BackgroundTransparency = 0
 
@@ -4491,12 +4491,12 @@ function Luna:CreateWindow(WindowSettings)
 				ColorPicker.Interact.MouseButton1Down:Connect(function()
 					if not opened then
 						opened = true 
-						tween(ColorPicker, {Size = UDim2.new( 1.042, -25,0, 165)}, nil, TweenInfo.new(0.6, Enum.EasingStyle.Exponential))
+						tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 182)}, nil, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
 						tween(Background, {Size = openedsize})
 						tween(Display, {BackgroundTransparency = 1})
 					else
 						opened = false
-						tween(ColorPicker, {Size = UDim2.new(1.042, -25,0, 38)}, nil, TweenInfo.new(0.6, Enum.EasingStyle.Exponential))
+						tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 46)}, nil, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
 						tween(Background, {Size = closedsize})
 						tween(Display, {BackgroundTransparency = 0})
 					end
@@ -6215,7 +6215,7 @@ function Luna:CreateWindow(WindowSettings)
 
 			ColorPickerV.Color = Color3ToHex(ColorPickerSettings.Color)
 
-			local closedsize = UDim2.new(0, 75, 0, 22)
+			local closedsize = UDim2.fromOffset(72, 24)
 			local openedsize = UDim2.new(0, 219, 0, 129)
 
 			local ColorPicker = Elements.Template.ColorPicker:Clone()
@@ -6228,7 +6228,7 @@ function Luna:CreateWindow(WindowSettings)
 			ColorPicker.Title.Text = ColorPickerSettings.Name
 			ColorPicker.Visible = true
 			ContentMount:Item(ColorPicker)
-			ColorPicker.Size = UDim2.new(1.042, -25,0, 38)
+			ColorPicker.Size = UDim2.new(1, -8, 0, 46)
 			Background.Size = closedsize
 			Display.BackgroundTransparency = 0
 
@@ -6269,12 +6269,12 @@ function Luna:CreateWindow(WindowSettings)
 			ColorPicker.Interact.MouseButton1Down:Connect(function()
 				if not opened then
 					opened = true 
-					tween(ColorPicker, {Size = UDim2.new( 1.042, -25,0, 165)}, nil, TweenInfo.new(0.6, Enum.EasingStyle.Exponential))
+					tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 182)}, nil, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
 					tween(Background, {Size = openedsize})
 					tween(Display, {BackgroundTransparency = 1})
 				else
 					opened = false
-					tween(ColorPicker, {Size = UDim2.new(1.042, -25,0, 38)}, nil, TweenInfo.new(0.6, Enum.EasingStyle.Exponential))
+					tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 46)}, nil, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
 					tween(Background, {Size = closedsize})
 					tween(Display, {BackgroundTransparency = 0})
 				end
@@ -6740,36 +6740,69 @@ function Luna:CreateWindow(WindowSettings)
 			local c3cp = Tab:CreateColorPicker({
 				Name = "Color 3",
 				Color = Color3.fromRGB(224, 138, 184),
-			}, "LunaInterfaceSuitePrebuiltCPC3") 
+			}, "LunaInterfaceSuitePrebuiltCPC3")
+
+			-- A fourth, balanced card previews the current three-stop gradient.
+			local preview = Instance.new("Frame")
+			preview.Name = "Gradient Preview"
+			preview.Size = UDim2.new(1, -8, 0, 46)
+			preview.BackgroundColor3 = Color3.fromRGB(32, 30, 38)
+			preview.BackgroundTransparency = 0.4
+			preview.BorderSizePixel = 0
+			ContentMount:Item(preview)
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, 7)
+			corner.Parent = preview
+			local label = Instance.new("TextLabel")
+			label.BackgroundTransparency = 1
+			label.Size = UDim2.new(1, -106, 1, 0)
+			label.Position = UDim2.fromOffset(12, 0)
+			label.Text = "Gradient Preview"
+			label.TextColor3 = Color3.fromRGB(226, 225, 237)
+			label.TextSize = 13
+			label.Font = Enum.Font.Gotham
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.Parent = preview
+			local sample = Instance.new("Frame")
+			sample.AnchorPoint = Vector2.new(1, 0.5)
+			sample.Position = UDim2.new(1, -12, 0.5, 0)
+			sample.Size = UDim2.fromOffset(82, 24)
+			sample.BackgroundColor3 = Color3.new(1, 1, 1)
+			sample.BorderSizePixel = 0
+			sample.Parent = preview
+			local rounded = Instance.new("UICorner")
+			rounded.CornerRadius = UDim.new(0, 6)
+			rounded.Parent = sample
+			local gradient = Instance.new("UIGradient")
+			gradient.Parent = sample
+			local palette = {
+				Color3.fromRGB(117, 164, 206),
+				Color3.fromRGB(123, 201, 201),
+				Color3.fromRGB(224, 138, 184),
+			}
+			local function updateColor(index, value)
+				if typeof(value) ~= "Color3" then return end
+				palette[index] = value
+				local sequence = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, palette[1]),
+					ColorSequenceKeypoint.new(0.5, palette[2]),
+					ColorSequenceKeypoint.new(1, palette[3]),
+				})
+				gradient.Color = sequence
+				Luna.ThemeGradient = sequence
+				LunaUI.ThemeRemote.Value = not LunaUI.ThemeRemote.Value
+			end
+			gradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, palette[1]),
+				ColorSequenceKeypoint.new(0.5, palette[2]),
+				ColorSequenceKeypoint.new(1, palette[3]),
+			})
 
 			task.wait(1)
 
-			c1cp:Set({
-				Callback = function(Value)
-					if c2cp and c3cp then
-						Luna.ThemeGradient = ColorSequence.new{ColorSequenceKeypoint.new(0.00, Value or Color3.fromRGB(255,255,255)), ColorSequenceKeypoint.new(0.50, c2cp.Color or Color3.fromRGB(255,255,255)), ColorSequenceKeypoint.new(1.00, c3cp.Color or Color3.fromRGB(255,255,255))}
-						LunaUI.ThemeRemote.Value = not LunaUI.ThemeRemote.Value
-					end
-				end
-			})
-
-			c2cp:Set({
-				Callback = function(Value)
-					if c1cp and c3cp then
-						Luna.ThemeGradient = ColorSequence.new{ColorSequenceKeypoint.new(0.00, c1cp.Color or Color3.fromRGB(255,255,255)), ColorSequenceKeypoint.new(0.50, Value or Color3.fromRGB(255,255,255)), ColorSequenceKeypoint.new(1.00, c3cp.Color or Color3.fromRGB(255,255,255))}
-						LunaUI.ThemeRemote.Value = not LunaUI.ThemeRemote.Value
-					end
-				end
-			})
-
-			c3cp:Set({
-				Callback = function(Valuex)
-					if c2cp and c1cp then
-						Luna.ThemeGradient = ColorSequence.new{ColorSequenceKeypoint.new(0.00, c1cp.Color or Color3.fromRGB(255,255,255)), ColorSequenceKeypoint.new(0.50, c2cp.Color or Color3.fromRGB(255,255,255)), ColorSequenceKeypoint.new(1.00, Valuex or Color3.fromRGB(255,255,255))}
-						LunaUI.ThemeRemote.Value = not LunaUI.ThemeRemote.Value
-					end
-				end
-			})
+			c1cp:Set({Callback = function(value) updateColor(1, value) end})
+			c2cp:Set({Callback = function(value) updateColor(2, value) end})
+			c3cp:Set({Callback = function(value) updateColor(3, value) end})
 
 			Tab:CreateSection("Preset Gradients")
 
