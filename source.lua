@@ -2594,6 +2594,272 @@ function Luna:CreateWindow(WindowSettings)
 		}
 	end
 
+
+	-- Native, responsive color editor. Unlike the original Luna asset, every
+	-- field is positioned relative to the card and contributes to its height.
+	-- This keeps the existing animated open/close behavior without overflow.
+	local function CreateResponsiveColorPicker(mount, options, flag)
+		options = Kwargify({
+			Name = "Color Picker",
+			Color = Color3.new(1, 1, 1),
+			Callback = function() end,
+		}, options or {})
+		local value = options.Color
+		if typeof(value) ~= "Color3" then value = Color3.new(1, 1, 1) end
+		local h, sat, brightness = value:ToHSV()
+		local isOpen, active = false, nil
+		local events = {}
+		local editor = {Class = "Colorpicker", Color = value, Settings = options, IgnoreClass = false}
+		local function link(signal, fn)
+			local connection = signal:Connect(fn)
+			table.insert(events, connection)
+			return connection
+		end
+		local function element(kind, name, parent, size, position, color)
+			local obj = Instance.new(kind)
+			obj.Name = name
+			if size then obj.Size = size end
+			if position then obj.Position = position end
+			if color and obj:IsA("GuiObject") then obj.BackgroundColor3 = color end
+			if obj:IsA("GuiObject") then obj.BorderSizePixel = 0 end
+			obj.Parent = parent
+			return obj
+		end
+		local function round(parent, amount)
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, amount)
+			c.Parent = parent
+			return c
+		end
+		local card = element("Frame", options.Name, nil,
+			UDim2.new(1,-10,0,50), nil, Color3.fromRGB(32,30,38))
+		card.BackgroundTransparency = 0.22
+		card.ClipsDescendants = true
+		round(card, 9)
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(87,84,104)
+		stroke.Transparency = 0.58
+		stroke.Thickness = 1
+		stroke.Parent = card
+		mount:Full(card)
+
+		local header = element("TextButton","Header",card,
+			UDim2.new(1,0,0,49), UDim2.new(),Color3.fromRGB(32,30,38))
+		header.BackgroundTransparency = 1
+		header.Text = ""
+		header.AutoButtonColor = false
+		header.ZIndex = 5
+		local title = element("TextLabel","Title",header,
+			UDim2.new(1,-132,1,0),UDim2.fromOffset(14,0))
+		title.BackgroundTransparency = 1
+		title.Text = options.Name
+		title.Font = Enum.Font.Gotham
+		title.TextSize = 14
+		title.TextColor3 = Color3.fromRGB(233,231,240)
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.ZIndex = 6
+		local swatch = element("Frame","ColorSwatch",header,
+			UDim2.fromOffset(72,27),UDim2.new(1,-113,0.5,-13),value)
+		swatch.ZIndex = 6
+		round(swatch,7)
+		local arrow = element("TextLabel","Arrow",header,
+			UDim2.fromOffset(20,24),UDim2.new(1,-32,0.5,-12))
+		arrow.BackgroundTransparency = 1
+		arrow.Text = "⌄"
+		arrow.TextColor3 = Color3.fromRGB(198,195,210)
+		arrow.TextSize = 17
+		arrow.ZIndex = 6
+
+		local selector = element("Frame","SVPalette",card,
+			UDim2.new(1,-28,0,104),UDim2.fromOffset(14,61),
+			Color3.fromHSV(h,1,1))
+		selector.Active = true
+		selector.ClipsDescendants = true
+		selector.ZIndex = 2
+		round(selector,7)
+		local white = element("Frame","WhiteOverlay",selector,UDim2.fromScale(1,1),UDim2.new(),Color3.new(1,1,1))
+		white.ZIndex = 3
+		local whiteGradient=Instance.new("UIGradient")
+		whiteGradient.Transparency=NumberSequence.new({
+			NumberSequenceKeypoint.new(0,0),
+			NumberSequenceKeypoint.new(1,1)
+		})
+		whiteGradient.Parent=white
+		local black = element("Frame","BlackOverlay",selector,UDim2.fromScale(1,1),UDim2.new(),Color3.new(0,0,0))
+		black.ZIndex=4
+		local blackGradient=Instance.new("UIGradient")
+		blackGradient.Rotation=90
+		blackGradient.Transparency=NumberSequence.new({
+			NumberSequenceKeypoint.new(0,1),
+			NumberSequenceKeypoint.new(1,0)
+		})
+		blackGradient.Parent=black
+		local target=element("Frame","Selection",selector,
+			UDim2.fromOffset(13,13),UDim2.new(),Color3.new(1,1,1))
+		target.AnchorPoint=Vector2.new(0.5,0.5)
+		target.BackgroundTransparency=0.8
+		target.ZIndex=5
+		round(target,999)
+		local mark=Instance.new("UIStroke")
+		mark.Thickness=2
+		mark.Color=Color3.new(1,1,1)
+		mark.Parent=target
+
+		local hue = element("Frame","Hue",card,
+			UDim2.new(1,-28,0,15),UDim2.fromOffset(14,174),
+			Color3.new(1,1,1))
+		hue.Active=true
+		hue.ZIndex=2
+		round(hue,8)
+		local rainbow=Instance.new("UIGradient")
+		rainbow.Color=ColorSequence.new({
+			ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,0)),
+			ColorSequenceKeypoint.new(1/6,Color3.fromRGB(255,255,0)),
+			ColorSequenceKeypoint.new(2/6,Color3.fromRGB(0,255,0)),
+			ColorSequenceKeypoint.new(3/6,Color3.fromRGB(0,255,255)),
+			ColorSequenceKeypoint.new(4/6,Color3.fromRGB(0,0,255)),
+			ColorSequenceKeypoint.new(5/6,Color3.fromRGB(255,0,255)),
+			ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,0))
+		})
+		rainbow.Parent=hue
+		local hueCursor = element("Frame","HueCursor",hue,
+			UDim2.fromOffset(6,20),UDim2.new(),Color3.fromRGB(245,245,245))
+		hueCursor.AnchorPoint=Vector2.new(0.5,0.5)
+		hueCursor.ZIndex=4
+		round(hueCursor,4)
+
+		local inputRow=element("Frame","InputRow",card,
+			UDim2.new(1,-28,0,30),UDim2.fromOffset(14,200))
+		inputRow.BackgroundTransparency=1
+		local entries={}
+		local sizes={0.38,0.18,0.18,0.18}
+		local locations={0,0.405,0.605,0.805}
+		local titles={"HEX","R","G","B"}
+		for i=1,4 do
+			local box=element("TextBox",titles[i],inputRow,
+				UDim2.new(sizes[i],-3,1,0),UDim2.new(locations[i],0,0,0),
+				Color3.fromRGB(24,23,31))
+			box.TextColor3=Color3.fromRGB(232,231,242)
+			box.PlaceholderText=titles[i]
+			box.Font=Enum.Font.Gotham
+			box.TextSize=12
+			box.ClearTextOnFocus=false
+			box.ZIndex=3
+			round(box,6)
+			entries[i]=box
+		end
+
+		local function updateColor(nextColor, fire)
+			if typeof(nextColor)~="Color3" then return end
+			value=nextColor
+			options.Color=nextColor
+			editor.Color=nextColor
+			h,sat,brightness=nextColor:ToHSV()
+			swatch.BackgroundColor3=nextColor
+			selector.BackgroundColor3=Color3.fromHSV(h,1,1)
+			target.Position=UDim2.fromScale(sat,1-brightness)
+			hueCursor.Position=UDim2.fromScale(h,0.5)
+			entries[1].Text=string.format("#%02X%02X%02X",
+				math.round(nextColor.R*255),math.round(nextColor.G*255),math.round(nextColor.B*255))
+			entries[2].Text=tostring(math.round(nextColor.R*255))
+			entries[3].Text=tostring(math.round(nextColor.G*255))
+			entries[4].Text=tostring(math.round(nextColor.B*255))
+			if fire and type(options.Callback)=="function" then
+				local ok,err=pcall(options.Callback,nextColor)
+				if not ok then warn("[Luna ColorPicker] "..tostring(err)) end
+			end
+		end
+
+		local function toggle()
+			isOpen=not isOpen
+			TweenService:Create(card,TweenInfo.new(0.38,Enum.EasingStyle.Exponential,Enum.EasingDirection.Out),
+				{Size=UDim2.new(1,-10,0,isOpen and 242 or 50)}):Play()
+			TweenService:Create(arrow,TweenInfo.new(0.28,Enum.EasingStyle.Exponential,Enum.EasingDirection.Out),
+				{Rotation=isOpen and 180 or 0}):Play()
+		end
+		link(header.MouseButton1Click,toggle)
+		link(header.MouseEnter,function()
+			TweenService:Create(stroke,TweenInfo.new(0.2),{Transparency=0.22}):Play()
+		end)
+		link(header.MouseLeave,function()
+			TweenService:Create(stroke,TweenInfo.new(0.2),{Transparency=0.58}):Play()
+		end)
+
+		local function pointInside(position, gui)
+			local abs=gui.AbsolutePosition
+			local size=gui.AbsoluteSize
+			if size.X<=0 or size.Y<=0 then return nil,nil end
+			return math.clamp((position.X-abs.X)/size.X,0,1),
+				math.clamp((position.Y-abs.Y)/size.Y,0,1)
+		end
+		local function applyPointer(input, mode)
+			if not isOpen then return end
+			if mode=="SV" then
+				local x,y=pointInside(input.Position,selector)
+				if x then updateColor(Color3.fromHSV(h,x,1-y),true) end
+			else
+				local x=pointInside(input.Position,hue)
+				if x then updateColor(Color3.fromHSV(x,sat,brightness),true) end
+			end
+		end
+		local function beginPointer(input, mode)
+			if input.UserInputType~=Enum.UserInputType.Touch and input.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+			active={input=input,mode=mode}
+			applyPointer(input,mode)
+		end
+		link(selector.InputBegan,function(input) beginPointer(input,"SV") end)
+		link(hue.InputBegan,function(input) beginPointer(input,"Hue") end)
+		link(UserInputService.InputChanged,function(input)
+			if not active then return end
+			if input~=active.input and not (
+				active.input.UserInputType==Enum.UserInputType.MouseButton1 and
+				input.UserInputType==Enum.UserInputType.MouseMovement) then return end
+			applyPointer(input,active.mode)
+		end)
+		link(UserInputService.InputEnded,function(input)
+			if active and input==active.input then active=nil end
+		end)
+
+		link(entries[1].FocusLost,function()
+			local rr,gg,bb=entries[1].Text:match("^#?(%x%x)(%x%x)(%x%x)$")
+			if rr then
+				updateColor(Color3.fromRGB(tonumber(rr,16),tonumber(gg,16),tonumber(bb,16)),true)
+			else updateColor(value,false) end
+		end)
+		for i=2,4 do
+			link(entries[i].FocusLost,function()
+				local rgb={}
+				for j=2,4 do
+					local num=tonumber(entries[j].Text)
+					if num==nil then updateColor(value,false);return end
+					rgb[j-1]=math.clamp(math.round(num),0,255)
+				end
+				updateColor(Color3.fromRGB(rgb[1],rgb[2],rgb[3]),true)
+			end)
+		end
+
+		function editor:Set(newSettings)
+			newSettings=newSettings or {}
+			for k,v in pairs(newSettings) do options[k]=v end
+			editor.Settings=options
+			title.Text=options.Name
+			if newSettings.Color~=nil then
+				updateColor(newSettings.Color,true)
+			elseif newSettings.Callback~=nil then
+				updateColor(value,true)
+			end
+		end
+		function editor:Destroy()
+			active=nil
+			for _,connection in ipairs(events) do connection:Disconnect() end
+			card:Destroy()
+			if flag then Luna.Options[flag]=nil end
+		end
+		updateColor(value,true)
+		if flag then Luna.Options[flag]=editor end
+		return editor
+	end
+
 	Main.Title.Title.Text = WindowSettings.Name
 	Main.Title.subtitle.Text = WindowSettings.Subtitle
 	Main.Logo.Image = "rbxassetid://" .. WindowSettings.LogoID
@@ -4497,251 +4763,8 @@ function Luna:CreateWindow(WindowSettings)
 			end
 
 			-- Color Picker
-			function Section:CreateColorPicker(ColorPickerSettings, Flag) -- by Rayfield/Throit
-				TabPage.Position = UDim2.new(0,0,0,28)
-				local ColorPickerV = {IgnoreClass = false, Class = "Colorpicker", Settings = ColorPickerSettings}
-
-				ColorPickerSettings = Kwargify({
-					Name = "Color Picker",
-					Color = Color3.fromRGB(255,255,255),
-					Callback = function(Value)
-						-- The function that takes place every time the color picker is moved/changed
-						-- The variable (Value) is a Color3fromRGB value based on which color is selected
-					end
-				}, ColorPickerSettings or {})
-
-				local function Color3ToHex(color)
-					return string.format("#%02X%02X%02X", math.floor(color.R * 255), math.floor(color.G * 255), math.floor(color.B * 255))
-				end
-
-				ColorPickerV.Color = Color3ToHex(ColorPickerSettings.Color)
-
-				local closedsize = UDim2.fromOffset(72, 24)
-				local openedsize = UDim2.new(0, 219, 0, 129)
-
-				local ColorPicker = Elements.Template.ColorPicker:Clone()
-				local Background = ColorPicker.CPBackground
-				local Display = Background.Display
-				local Main = Background.MainCP
-				local Slider = ColorPicker.ColorSlider
-
-				ColorPicker.Name = ColorPickerSettings.Name
-				ColorPicker.Title.Text = ColorPickerSettings.Name
-				ColorPicker.Visible = true
-				SectionMount:Item(ColorPicker)
-				ColorPicker.Size = UDim2.new(1, -8, 0, 46)
-				Background.Size = closedsize
-				Display.BackgroundTransparency = 0
-
-				ColorPicker["MouseEnter"]:Connect(function()
-					tween(ColorPicker.UIStroke, {Color = Color3.fromRGB(87, 84, 104)})
-				end)
-				ColorPicker["MouseLeave"]:Connect(function()
-					tween(ColorPicker.UIStroke, {Color = Color3.fromRGB(64,61,76)})
-				end)
-
-				local function SafeCallback(param, c2)
-					local Success, Response = pcall(function()
-						ColorPickerSettings.Callback(param)
-					end)
-					if not Success then
-						TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0}):Play()
-						TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundColor3 = Color3.fromRGB(85, 0, 0)}):Play()
-						TweenService:Create(ColorPicker.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()
-						ColorPicker.Title.Text = "Callback Error"
-						print("Luna Interface Suite | "..ColorPickerSettings.Name.." Callback Error " ..tostring(Response))
-						wait(0.5)
-						ColorPicker.Title.Text = ColorPickerSettings.Name
-						TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0.5}):Play()
-						TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundColor3 = Color3.fromRGB(32, 30, 38)}):Play()
-						TweenService:Create(ColorPicker.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 0.5}):Play()
-					end
-					if Success and c2 then
-						c2()
-					end
-				end
-
-				local opened = false
-
-				local mouse = game.Players.LocalPlayer:GetMouse()
-				Main.Image = "http://www.roblox.com/asset/?id=11415645739"
-				local mainDragging = false 
-				local sliderDragging = false 
-				ColorPicker.Interact.MouseButton1Down:Connect(function()
-					if not opened then
-						opened = true 
-						tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 182)}, nil, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
-						tween(Background, {Size = openedsize})
-						tween(Display, {BackgroundTransparency = 1})
-					else
-						opened = false
-						tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 46)}, nil, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
-						tween(Background, {Size = closedsize})
-						tween(Display, {BackgroundTransparency = 0})
-					end
-				end)
-				UserInputService.InputEnded:Connect(function(input, gameProcessed) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
-						mainDragging = false
-						sliderDragging = false
-					end end)
-				Main.MouseButton1Down:Connect(function()
-					if opened then
-						mainDragging = true 
-					end
-				end)
-				Main.MainPoint.MouseButton1Down:Connect(function()
-					if opened then
-						mainDragging = true 
-					end
-				end)
-				Slider.MouseButton1Down:Connect(function()
-					sliderDragging = true 
-				end)
-				Slider.SliderPoint.MouseButton1Down:Connect(function()
-					sliderDragging = true 
-				end)
-				local h,s,v = ColorPickerSettings.Color:ToHSV()
-				local color = Color3.fromHSV(h,s,v) 
-				local r,g,b = math.floor((h*255)+0.5),math.floor((s*255)+0.5),math.floor((v*255)+0.5)
-				local hex = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-				ColorPicker.HexInput.InputBox.Text = hex
-				local function setDisplay(hp,sp,vp)
-					--Main
-					Main.MainPoint.Position = UDim2.new(s,-Main.MainPoint.AbsoluteSize.X/2,1-v,-Main.MainPoint.AbsoluteSize.Y/2)
-					Main.MainPoint.ImageColor3 = Color3.fromHSV(hp,sp,vp)
-					Background.BackgroundColor3 = Color3.fromHSV(hp,1,1)
-					Display.BackgroundColor3 = Color3.fromHSV(hp,sp,vp)
-					--Slider 
-					local x = hp * Slider.AbsoluteSize.X
-					Slider.SliderPoint.Position = UDim2.new(0,x-Slider.SliderPoint.AbsoluteSize.X/2,0.5,0)
-					Slider.SliderPoint.ImageColor3 = Color3.fromHSV(hp,1,1)
-					local color = Color3.fromHSV(hp,sp,vp) 
-					local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-					ColorPicker.RInput.InputBox.Text = tostring(r)
-					ColorPicker.GInput.InputBox.Text = tostring(g)
-					ColorPicker.BInput.InputBox.Text = tostring(b)
-					hex = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-					ColorPicker.HexInput.InputBox.Text = hex
-				end
-				setDisplay(h,s,v)
-				ColorPicker.HexInput.InputBox.FocusLost:Connect(function()
-					if not pcall(function()
-							local r, g, b = string.match(ColorPicker.HexInput.InputBox.Text, "^#?(%w%w)(%w%w)(%w%w)$")
-							local rgbColor = Color3.fromRGB(tonumber(r, 16),tonumber(g, 16), tonumber(b, 16))
-							h,s,v = rgbColor:ToHSV()
-							hex = ColorPicker.HexInput.InputBox.Text
-							setDisplay()
-							ColorPickerSettings.Color = rgbColor
-						end) 
-					then 
-						ColorPicker.HexInput.InputBox.Text = hex 
-					end
-					local r,g,b = math.floor((h*255)+0.5),math.floor((s*255)+0.5),math.floor((v*255)+0.5)
-					ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-					SafeCallback( Color3.fromRGB(r,g,b))
-				end)
-				--RGB
-				local function rgbBoxes(box,toChange)
-					local value = tonumber(box.Text) 
-					local color = Color3.fromHSV(h,s,v) 
-					local oldR,oldG,oldB = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-					local save 
-					if toChange == "R" then save = oldR;oldR = value elseif toChange == "G" then save = oldG;oldG = value else save = oldB;oldB = value end
-					if value then 
-						value = math.clamp(value,0,255)
-						h,s,v = Color3.fromRGB(oldR,oldG,oldB):ToHSV()
-						setDisplay()
-					else 
-						box.Text = tostring(save)
-					end
-					local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-					ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-				end
-				ColorPicker.RInput.InputBox.FocusLost:connect(function()
-					rgbBoxes(ColorPicker.RInput.InputBox,"R")
-					SafeCallback(Color3.fromRGB(r,g,b))
-				end)
-				ColorPicker.GInput.InputBox.FocusLost:connect(function()
-					rgbBoxes(ColorPicker.GInput.InputBox,"G")
-					SafeCallback(Color3.fromRGB(r,g,b))
-				end)
-				ColorPicker.BInput.InputBox.FocusLost:connect(function()
-					rgbBoxes(ColorPicker.BInput.InputBox,"B")
-					SafeCallback(Color3.fromRGB(r,g,b))
-				end)
-				RunService.RenderStepped:connect(function()
-					if mainDragging then 
-						local localX = math.clamp(mouse.X-Main.AbsolutePosition.X,0,Main.AbsoluteSize.X)
-						local localY = math.clamp(mouse.Y-Main.AbsolutePosition.Y,0,Main.AbsoluteSize.Y)
-						Main.MainPoint.Position = UDim2.new(0,localX-Main.MainPoint.AbsoluteSize.X/2,0,localY-Main.MainPoint.AbsoluteSize.Y/2)
-						s = localX / Main.AbsoluteSize.X
-						v = 1 - (localY / Main.AbsoluteSize.Y)
-						Display.BackgroundColor3 = Color3.fromHSV(h,s,v)
-						Main.MainPoint.ImageColor3 = Color3.fromHSV(h,s,v)
-						Background.BackgroundColor3 = Color3.fromHSV(h,1,1)
-						local color = Color3.fromHSV(h,s,v) 
-						local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-						ColorPicker.RInput.InputBox.Text = tostring(r)
-						ColorPicker.GInput.InputBox.Text = tostring(g)
-						ColorPicker.BInput.InputBox.Text = tostring(b)
-						ColorPicker.HexInput.InputBox.Text = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-						SafeCallback(Color3.fromRGB(r,g,b))
-						ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-						ColorPickerV.Color = ColorPickerSettings.Color
-					end
-					if sliderDragging then 
-						local localX = math.clamp(mouse.X-Slider.AbsolutePosition.X,0,Slider.AbsoluteSize.X)
-						h = localX / Slider.AbsoluteSize.X
-						Display.BackgroundColor3 = Color3.fromHSV(h,s,v)
-						Slider.SliderPoint.Position = UDim2.new(0,localX-Slider.SliderPoint.AbsoluteSize.X/2,0.5,0)
-						Slider.SliderPoint.ImageColor3 = Color3.fromHSV(h,1,1)
-						Background.BackgroundColor3 = Color3.fromHSV(h,1,1)
-						Main.MainPoint.ImageColor3 = Color3.fromHSV(h,s,v)
-						local color = Color3.fromHSV(h,s,v) 
-						local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-						ColorPicker.RInput.InputBox.Text = tostring(r)
-						ColorPicker.GInput.InputBox.Text = tostring(g)
-						ColorPicker.BInput.InputBox.Text = tostring(b)
-						ColorPicker.HexInput.InputBox.Text = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-						SafeCallback(Color3.fromRGB(r,g,b))
-						ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-						ColorPickerV.Color = ColorPickerSettings.Color
-					end
-				end)
-
-				function ColorPickerV:Set(NewColorPickerSettings)
-
-					NewColorPickerSettings = Kwargify(ColorPickerSettings, NewColorPickerSettings or {})
-
-					ColorPickerV.Settings = NewColorPickerSettings
-					ColorPickerSettings = NewColorPickerSettings
-
-					ColorPicker.Name = ColorPickerSettings.Name
-					ColorPicker.Title.Text = ColorPickerSettings.Name
-					ColorPicker.Visible = true
-
-					local h,s,v = ColorPickerSettings.Color:ToHSV()
-					local color = Color3.fromHSV(h,s,v) 
-					local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-					local hex = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-					ColorPicker.HexInput.InputBox.Text = hex
-					setDisplay(h,s,v)
-					SafeCallback(Color3.fromRGB(r,g,b))
-
-					ColorPickerV.Color = ColorPickerSettings.Color
-				end
-
-				function ColorPickerV:Destroy()
-					ColorPicker:Destroy()
-				end
-
-				if Flag then
-					Luna.Options[Flag] = ColorPickerV
-				end
-
-				SafeCallback(ColorPickerSettings.Color)
-
-				return ColorPickerV
+			function Section:CreateColorPicker(ColorPickerSettings, Flag)
+				return CreateResponsiveColorPicker(SectionMount, ColorPickerSettings, Flag)
 			end
 
 			return Section
@@ -6276,254 +6299,8 @@ function Luna:CreateWindow(WindowSettings)
 		end
 
 		-- Color Picker
-		function Tab:CreateColorPicker(ColorPickerSettings, Flag) -- by Rayfield/Throit
-			local ColorPickerV = {IgnoreClass = false, Class = "Colorpicker", Settings = ColorPickerSettings}
-
-			ColorPickerSettings = Kwargify({
-				Name = "Color Picker",
-				Color = Color3.fromRGB(255,255,255),
-				Callback = function(Value)
-					-- The function that takes place every time the color picker is moved/changed
-					-- The variable (Value) is a Color3fromRGB value based on which color is selected
-				end
-			}, ColorPickerSettings or {})
-
-			local function Color3ToHex(color)
-				return string.format("#%02X%02X%02X", math.floor(color.R * 255), math.floor(color.G * 255), math.floor(color.B * 255))
-			end
-
-			ColorPickerV.Color = Color3ToHex(ColorPickerSettings.Color)
-
-			local closedsize = UDim2.fromOffset(72, 24)
-			local openedsize = UDim2.new(0, 219, 0, 129)
-
-			local ColorPicker = Elements.Template.ColorPicker:Clone()
-			local Background = ColorPicker.CPBackground
-			local Display = Background.Display
-			local Main = Background.MainCP
-			local Slider = ColorPicker.ColorSlider
-
-			ColorPicker.Name = ColorPickerSettings.Name
-			ColorPicker.Title.Text = ColorPickerSettings.Name
-			ColorPicker.Visible = true
-			if ColorPickerSettings.FullWidth then
-				ContentMount:Full(ColorPicker)
-			else
-				ContentMount:Item(ColorPicker)
-			end
-			ColorPicker.Size = UDim2.new(1, -8, 0, 46)
-			Background.Size = closedsize
-			Display.BackgroundTransparency = 0
-
-			ColorPicker["MouseEnter"]:Connect(function()
-				tween(ColorPicker.UIStroke, {Color = Color3.fromRGB(87, 84, 104)})
-			end)
-			ColorPicker["MouseLeave"]:Connect(function()
-				tween(ColorPicker.UIStroke, {Color = Color3.fromRGB(64,61,76)})
-			end)
-
-			local function SafeCallback(param, c2)
-				local Success, Response = pcall(function()
-					ColorPickerSettings.Callback(param)
-				end)
-				if not Success then
-					TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0}):Play()
-					TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundColor3 = Color3.fromRGB(85, 0, 0)}):Play()
-					TweenService:Create(ColorPicker.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()
-					ColorPicker.Title.Text = "Callback Error"
-					print("Luna Interface Suite | "..ColorPickerSettings.Name.." Callback Error " ..tostring(Response))
-					wait(0.5)
-					ColorPicker.Title.Text = ColorPickerSettings.Name
-					TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0.5}):Play()
-					TweenService:Create(ColorPicker, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundColor3 = Color3.fromRGB(32, 30, 38)}):Play()
-					TweenService:Create(ColorPicker.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 0.5}):Play()
-				end
-				if Success and c2 then
-					c2()
-				end
-			end
-
-			local opened = false
-
-			local mouse = game.Players.LocalPlayer:GetMouse()
-			Main.Image = "http://www.roblox.com/asset/?id=11415645739"
-			local mainDragging = false 
-			local sliderDragging = false 
-			ColorPicker.Interact.MouseButton1Down:Connect(function()
-				if not opened then
-					opened = true 
-					tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 182)}, nil, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
-					tween(Background, {Size = openedsize})
-					tween(Display, {BackgroundTransparency = 1})
-				else
-					opened = false
-					tween(ColorPicker, {Size = UDim2.new(1, -8, 0, 46)}, nil, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
-					tween(Background, {Size = closedsize})
-					tween(Display, {BackgroundTransparency = 0})
-				end
-			end)
-			UserInputService.InputEnded:Connect(function(input, gameProcessed) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
-					mainDragging = false
-					sliderDragging = false
-				end end)
-			Main.MouseButton1Down:Connect(function()
-				if opened then
-					mainDragging = true 
-				end
-			end)
-			Main.MainPoint.MouseButton1Down:Connect(function()
-				if opened then
-					mainDragging = true 
-				end
-			end)
-			Slider.MouseButton1Down:Connect(function()
-				sliderDragging = true 
-			end)
-			Slider.SliderPoint.MouseButton1Down:Connect(function()
-				sliderDragging = true 
-			end)
-			local h,s,v = ColorPickerSettings.Color:ToHSV()
-			local color = Color3.fromHSV(h,s,v) 
-			local r,g,b = math.floor((h*255)+0.5),math.floor((s*255)+0.5),math.floor((v*255)+0.5)
-			local hex = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-			ColorPicker.HexInput.InputBox.Text = hex
-			local function setDisplay(hp,sp,vp)
-				--Main
-				Main.MainPoint.Position = UDim2.new(s,-Main.MainPoint.AbsoluteSize.X/2,1-v,-Main.MainPoint.AbsoluteSize.Y/2)
-				Main.MainPoint.ImageColor3 = Color3.fromHSV(hp,sp,vp)
-				Background.BackgroundColor3 = Color3.fromHSV(hp,1,1)
-				Display.BackgroundColor3 = Color3.fromHSV(hp,sp,vp)
-				--Slider 
-				local x = hp * Slider.AbsoluteSize.X
-				Slider.SliderPoint.Position = UDim2.new(0,x-Slider.SliderPoint.AbsoluteSize.X/2,0.5,0)
-				Slider.SliderPoint.ImageColor3 = Color3.fromHSV(hp,1,1)
-				local color = Color3.fromHSV(hp,sp,vp) 
-				local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-				ColorPicker.RInput.InputBox.Text = tostring(r)
-				ColorPicker.GInput.InputBox.Text = tostring(g)
-				ColorPicker.BInput.InputBox.Text = tostring(b)
-				hex = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-				ColorPicker.HexInput.InputBox.Text = hex
-			end
-			setDisplay(h,s,v)
-			ColorPicker.HexInput.InputBox.FocusLost:Connect(function()
-				if not pcall(function()
-						local r, g, b = string.match(ColorPicker.HexInput.InputBox.Text, "^#?(%w%w)(%w%w)(%w%w)$")
-						local rgbColor = Color3.fromRGB(tonumber(r, 16),tonumber(g, 16), tonumber(b, 16))
-						h,s,v = rgbColor:ToHSV()
-						hex = ColorPicker.HexInput.InputBox.Text
-						setDisplay()
-						ColorPickerSettings.Color = rgbColor
-					end) 
-				then 
-					ColorPicker.HexInput.InputBox.Text = hex 
-				end
-				local r,g,b = math.floor((h*255)+0.5),math.floor((s*255)+0.5),math.floor((v*255)+0.5)
-				ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-				SafeCallback( Color3.fromRGB(r,g,b))
-			end)
-			--RGB
-			local function rgbBoxes(box,toChange)
-				local value = tonumber(box.Text) 
-				local color = Color3.fromHSV(h,s,v) 
-				local oldR,oldG,oldB = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-				local save 
-				if toChange == "R" then save = oldR;oldR = value elseif toChange == "G" then save = oldG;oldG = value else save = oldB;oldB = value end
-				if value then 
-					value = math.clamp(value,0,255)
-					h,s,v = Color3.fromRGB(oldR,oldG,oldB):ToHSV()
-					setDisplay()
-				else 
-					box.Text = tostring(save)
-				end
-				local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-				ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-			end
-			ColorPicker.RInput.InputBox.FocusLost:connect(function()
-				rgbBoxes(ColorPicker.RInput.InputBox,"R")
-				SafeCallback(Color3.fromRGB(r,g,b))
-			end)
-			ColorPicker.GInput.InputBox.FocusLost:connect(function()
-				rgbBoxes(ColorPicker.GInput.InputBox,"G")
-				SafeCallback(Color3.fromRGB(r,g,b))
-			end)
-			ColorPicker.BInput.InputBox.FocusLost:connect(function()
-				rgbBoxes(ColorPicker.BInput.InputBox,"B")
-				SafeCallback(Color3.fromRGB(r,g,b))
-			end)
-			RunService.RenderStepped:connect(function()
-				if mainDragging then 
-					local localX = math.clamp(mouse.X-Main.AbsolutePosition.X,0,Main.AbsoluteSize.X)
-					local localY = math.clamp(mouse.Y-Main.AbsolutePosition.Y,0,Main.AbsoluteSize.Y)
-					Main.MainPoint.Position = UDim2.new(0,localX-Main.MainPoint.AbsoluteSize.X/2,0,localY-Main.MainPoint.AbsoluteSize.Y/2)
-					s = localX / Main.AbsoluteSize.X
-					v = 1 - (localY / Main.AbsoluteSize.Y)
-					Display.BackgroundColor3 = Color3.fromHSV(h,s,v)
-					Main.MainPoint.ImageColor3 = Color3.fromHSV(h,s,v)
-					Background.BackgroundColor3 = Color3.fromHSV(h,1,1)
-					local color = Color3.fromHSV(h,s,v) 
-					local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-					ColorPicker.RInput.InputBox.Text = tostring(r)
-					ColorPicker.GInput.InputBox.Text = tostring(g)
-					ColorPicker.BInput.InputBox.Text = tostring(b)
-					ColorPicker.HexInput.InputBox.Text = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-					SafeCallback(Color3.fromRGB(r,g,b))
-					ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-					ColorPickerV.Color = ColorPickerSettings.Color
-				end
-				if sliderDragging then 
-					local localX = math.clamp(mouse.X-Slider.AbsolutePosition.X,0,Slider.AbsoluteSize.X)
-					h = localX / Slider.AbsoluteSize.X
-					Display.BackgroundColor3 = Color3.fromHSV(h,s,v)
-					Slider.SliderPoint.Position = UDim2.new(0,localX-Slider.SliderPoint.AbsoluteSize.X/2,0.5,0)
-					Slider.SliderPoint.ImageColor3 = Color3.fromHSV(h,1,1)
-					Background.BackgroundColor3 = Color3.fromHSV(h,1,1)
-					Main.MainPoint.ImageColor3 = Color3.fromHSV(h,s,v)
-					local color = Color3.fromHSV(h,s,v) 
-					local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-					ColorPicker.RInput.InputBox.Text = tostring(r)
-					ColorPicker.GInput.InputBox.Text = tostring(g)
-					ColorPicker.BInput.InputBox.Text = tostring(b)
-					ColorPicker.HexInput.InputBox.Text = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-					SafeCallback(Color3.fromRGB(r,g,b))
-					ColorPickerSettings.Color = Color3.fromRGB(r,g,b)
-					ColorPickerV.Color = ColorPickerSettings.Color
-				end
-			end)
-
-			function ColorPickerV:Set(NewColorPickerSettings)
-
-				NewColorPickerSettings = Kwargify(ColorPickerSettings, NewColorPickerSettings or {})
-
-				ColorPickerV.Settings = NewColorPickerSettings
-				ColorPickerSettings = NewColorPickerSettings
-
-				ColorPicker.Name = ColorPickerSettings.Name
-				ColorPicker.Title.Text = ColorPickerSettings.Name
-				ColorPicker.Visible = true
-
-				local h,s,v = ColorPickerSettings.Color:ToHSV()
-				local color = Color3.fromHSV(h,s,v) 
-				local r,g,b = math.floor((color.R*255)+0.5),math.floor((color.G*255)+0.5),math.floor((color.B*255)+0.5)
-				local hex = string.format("#%02X%02X%02X",color.R*0xFF,color.G*0xFF,color.B*0xFF)
-				ColorPicker.HexInput.InputBox.Text = hex
-				setDisplay(h,s,v)
-				SafeCallback(Color3.fromRGB(r,g,b))
-
-				ColorPickerV.Color = ColorPickerSettings.Color
-			end
-
-			function ColorPickerV:Destroy()
-				ColorPicker:Destroy()
-			end
-
-			if Flag then
-				Luna.Options[Flag] = ColorPickerV
-			end
-
-			SafeCallback(ColorPickerSettings.Color)
-
-			return ColorPickerV
+		function Tab:CreateColorPicker(ColorPickerSettings, Flag)
+			return CreateResponsiveColorPicker(ContentMount, ColorPickerSettings, Flag)
 		end
 
 
