@@ -1840,7 +1840,17 @@ local function BlurModule(Frame)
 	end
 
 	UpdateOrientation(true)
-	RunService:BindToRenderStep(uid, 2000, UpdateOrientation)
+	-- Hide camera Glass geometry and depth effect when the UI minimizes.
+	local active = true
+	local function SetVisible(_, enabled)
+		active = enabled == true
+		f.Parent = active and root or nil
+		DepthOfField.Enabled = active
+	end
+	RunService:BindToRenderStep(uid, 2000, function(...)
+		if active then UpdateOrientation(...) end
+	end)
+	return {SetVisible = SetVisible}
 end
 
 local function unpackt(array : table)
@@ -2318,62 +2328,42 @@ end
 
 -- Store original visibility rather than destroying controls; restore it on
 -- reopening the UI. This changes only the minimized presentation.
-local MinimizedChildVisibility = setmetatable({}, {__mode = "k"})
-local MinimizedClipping = setmetatable({}, {__mode = "k"})
-local function SetMinimizedPresentation(Window, minimized)
-	local launcher = Window:FindFirstChild("LunaMinimizedLauncher")
-	if not launcher then return end
-	if minimized then
-		if MinimizedChildVisibility[Window] then return end
-		MinimizedClipping[Window] = Window.ClipsDescendants
-		Window.ClipsDescendants = true
-		local prior = {}
-		for _, child in ipairs(Window:GetChildren()) do
-			if child:IsA("GuiObject") and child ~= launcher then
-				prior[child] = child.Visible
-				child.Visible = false
-			end
-		end
-		MinimizedChildVisibility[Window] = prior
-		launcher.Visible = true
-	else
-		launcher.Visible = false
-		local prior = MinimizedChildVisibility[Window]
-		if prior then
-			for child, visible in pairs(prior) do
-				if child.Parent == Window then child.Visible = visible end
-			end
-			MinimizedChildVisibility[Window] = nil
-		end
-		if MinimizedClipping[Window] ~= nil then
-			Window.ClipsDescendants = MinimizedClipping[Window]
-			MinimizedClipping[Window] = nil
-		end
-	end
+local LunaFloatingLauncher = nil
+local LunaBlurController = nil
+
+local function Minimize(Window)
+	CalculateWindowSizes()
+	local button = LunaFloatingLauncher
+	if not button then return end
+	local viewport = Camera.ViewportSize
+	local side = MinSize.X.Offset
+	local p = Window.AbsolutePosition
+	button.Size = MinSize
+	button.Position = UDim2.fromOffset(
+		math.clamp(p.X, 12, math.max(12, viewport.X - side - 12)),
+		math.clamp(p.Y - 18, 20, math.max(20, viewport.Y - side - 12))
+	)
+	-- Original main window and its ShadowHolder no longer draw at all.
+	if LunaBlurController then LunaBlurController:SetVisible(false) end
+	Window.Visible = false
+	local shadow = Window.Parent:FindFirstChild("ShadowHolder")
+	if shadow then shadow.Visible = false end
+	button.Visible = true
 end
 
 local function Maximise(Window)
-	SetMinimizedPresentation(Window, false)
+	if LunaFloatingLauncher then LunaFloatingLauncher.Visible = false end
+	Window.Size = MainSize
+	Window.Visible = true
+	Window.Controls.Visible = true
 	Window.Controls.ToggleSize.ImageLabel.Image = "rbxassetid://10137941941"
 	Window.Elements.Visible = true
 	Window.Navigation.Visible = true
-	tween(Window, {Size = MainSize}, function()
-		ClampLunaWindowPosition(Window)
-	end, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
+	local shadow = Window.Parent:FindFirstChild("ShadowHolder")
+	if shadow then shadow.Size = MainSize; shadow.Visible = true end
+	if LunaBlurController then LunaBlurController:SetVisible(true) end
+	ClampLunaWindowPosition(Window)
 end
-
-local function Minimize(Window)
-	Window.Controls.ToggleSize.ImageLabel.Image = "rbxassetid://11036884234"
-	SetMinimizedPresentation(Window, true)
-	Window.Elements.Visible = false
-	Window.Navigation.Visible = false
-	-- No right-top controls are shown while minimized.
-	Window.Controls.Visible = false
-	tween(Window, {Size = MinSize}, function()
-		ClampLunaWindowPosition(Window)
-	end, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
-end
-
 
 function Luna:CreateWindow(WindowSettings)
 
@@ -2529,29 +2519,37 @@ function Luna:CreateWindow(WindowSettings)
 	Main.Title.subtitle.Text = WindowSettings.Subtitle
 	Main.Logo.Image = "rbxassetid://" .. WindowSettings.LogoID
 
-	-- Full-square reopen target; its only visible child is the centered emblem.
+	-- Independent 80px floating button, not a descendant of SmartWindow.
 	local MinimizedLauncher = Instance.new("ImageButton")
 	MinimizedLauncher.Name = "LunaMinimizedLauncher"
-	MinimizedLauncher.BackgroundTransparency = 1
+	MinimizedLauncher.BackgroundColor3 = Color3.fromRGB(28, 29, 36)
+	MinimizedLauncher.BackgroundTransparency = 0.17
 	MinimizedLauncher.BorderSizePixel = 0
-	MinimizedLauncher.Size = UDim2.fromScale(1, 1)
-	MinimizedLauncher.Position = UDim2.fromScale(0, 0)
-	MinimizedLauncher.Image = ""
 	MinimizedLauncher.AutoButtonColor = false
-	MinimizedLauncher.ZIndex = 100
+	MinimizedLauncher.Image = ""
+	MinimizedLauncher.Size = MinSize
+	MinimizedLauncher.Position = UDim2.fromOffset(26, 80)
 	MinimizedLauncher.Visible = false
-	MinimizedLauncher.Parent = Main
-
+	MinimizedLauncher.ZIndex = 110
+	MinimizedLauncher.Parent = LunaUI
+	LunaFloatingLauncher = MinimizedLauncher
+	local floatCorner = Instance.new("UICorner")
+	floatCorner.CornerRadius = UDim.new(0, 17)
+	floatCorner.Parent = MinimizedLauncher
+	local floatStroke = Instance.new("UIStroke")
+	floatStroke.Color = Color3.fromRGB(190, 199, 210)
+	floatStroke.Transparency = 0.77
+	floatStroke.Thickness = 1
+	floatStroke.Parent = MinimizedLauncher
 	local MinimizedEmblem = Instance.new("ImageLabel")
 	MinimizedEmblem.Name = "Emblem"
 	MinimizedEmblem.BackgroundTransparency = 1
-	MinimizedEmblem.BorderSizePixel = 0
 	MinimizedEmblem.AnchorPoint = Vector2.new(0.5, 0.5)
 	MinimizedEmblem.Position = UDim2.fromScale(0.5, 0.5)
-	MinimizedEmblem.Size = UDim2.fromScale(0.73, 0.73)
+	MinimizedEmblem.Size = UDim2.fromScale(0.78, 0.78)
 	MinimizedEmblem.ScaleType = Enum.ScaleType.Fit
 	MinimizedEmblem.Image = ResolveMinimizedEmblem(Main.Logo.Image)
-	MinimizedEmblem.ZIndex = 101
+	MinimizedEmblem.ZIndex = 111
 	MinimizedEmblem.Parent = MinimizedLauncher
 
 	Main.Visible = true
@@ -2616,7 +2614,7 @@ function Luna:CreateWindow(WindowSettings)
 
 	LunaUI.Enabled = true
 
-	BlurModule(Main)
+	LunaBlurController = BlurModule(Main)
 
 	if WindowSettings.KeySystem then
 		local KeySettings = WindowSettings.KeySettings
@@ -2773,9 +2771,12 @@ function Luna:CreateWindow(WindowSettings)
 
 	TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {BackgroundTransparency = 0.2, Size = MainSize}):Play()
 	TweenService:Create(Main.Parent.ShadowHolder, TweenInfo.new(0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = MainSize}):Play()
-	-- Match the larger content window to the current viewport after opening.
+	-- Shift the original window upward by 18px, preserving the upper inset.
 	task.delay(0.55, function()
-		if Main.Parent and not Window.Size then ClampLunaWindowPosition(Main) end
+		if Main.Parent and not Window.Size then
+			Main.Position = Main.Position + UDim2.fromOffset(0, -18)
+			ClampLunaWindowPosition(Main)
+		end
 	end)
 	TweenService:Create(Main.Title.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
 	TweenService:Create(Main.Title.subtitle, TweenInfo.new(0.35, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
@@ -6979,48 +6980,50 @@ function Luna:CreateWindow(WindowSettings)
 		end
 	end)
 
-	-- The square is the only minimized control; allow dragging without
-	-- unintentionally reopening the window after a touch movement.
-	local launcherDown, launcherPointer, launcherStart, launcherOrigin
-	local launcherMoved = false
+	-- Touch and mouse: drag is not interpreted as a restore tap.
+	local pointer, start, origin, moved
 	MinimizedLauncher.InputBegan:Connect(function(input)
 		if not Window.Size then return end
 		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-		launcherDown = true
-		launcherPointer = input
-		launcherStart = Vector2.new(input.Position.X, input.Position.Y)
-		launcherOrigin = Main.Position
-		launcherMoved = false
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End or input.UserInputState == Enum.UserInputState.Cancel then
-				launcherDown = false
-			end
-		end)
+		pointer = input
+		start = Vector2.new(input.Position.X, input.Position.Y)
+		origin = MinimizedLauncher.Position
+		moved = false
 	end)
 	UserInputService.InputChanged:Connect(function(input)
-		if not Window.Size or not launcherDown then return end
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input ~= launcherPointer then return end
-		local delta = Vector2.new(input.Position.X, input.Position.Y) - launcherStart
-		if delta.Magnitude > 9 then launcherMoved = true end
-		if not launcherMoved then return end
-		local request = UDim2.new(launcherOrigin.X.Scale, launcherOrigin.X.Offset + delta.X, launcherOrigin.Y.Scale, launcherOrigin.Y.Offset + delta.Y)
-		Main.Position = ClampLunaDragTarget(Main, request)
+		if not pointer or not Window.Size then return end
+		if input ~= pointer and not (pointer.UserInputType == Enum.UserInputType.MouseButton1
+			and input.UserInputType == Enum.UserInputType.MouseMovement) then return end
+		local d = Vector2.new(input.Position.X, input.Position.Y) - start
+		if d.Magnitude > 9 then moved = true end
+		if not moved then return end
+		local v, sz = Camera.ViewportSize, MinimizedLauncher.AbsoluteSize
+		MinimizedLauncher.Position = UDim2.fromOffset(
+			math.clamp(origin.X.Offset + d.X, 12, math.max(12, v.X - sz.X - 12)),
+			math.clamp(origin.Y.Offset + d.Y, 20, math.max(20, v.Y - sz.Y - 12))
+		)
 	end)
-	MinimizedLauncher.MouseButton1Click:Connect(function()
-		if not Window.Size or launcherMoved then return end
-		Window.Size = false
-		Maximise(Main)
-		if dragBar then dragBar.Visible = true end
+	UserInputService.InputEnded:Connect(function(input)
+		if not pointer then return end
+		if input ~= pointer and not (pointer.UserInputType == Enum.UserInputType.MouseButton1
+			and input.UserInputType == Enum.UserInputType.MouseButton1) then return end
+		local restore = not moved and Window.Size and MinimizedLauncher.Visible
+		pointer = nil
+		if restore then
+			Window.Size = false
+			Maximise(Main)
+			if dragBar then dragBar.Visible = true end
+		end
 	end)
 
 	Main.Controls.ToggleSize.ImageLabel.MouseButton1Click:Connect(function()
 		Window.Size = not Window.Size
 		if Window.Size then
+			if dragBar then dragBar.Visible = false end
 			Minimize(Main)
-			dragBar.Visible = false
 		else
 			Maximise(Main)
-			dragBar.Visible = true
+			if dragBar then dragBar.Visible = true end
 		end
 	end)
 	Main.Controls.ToggleSize["MouseEnter"]:Connect(function()
