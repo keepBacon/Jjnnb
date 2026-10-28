@@ -2036,6 +2036,32 @@ local KeySystem : Frame = Main.KeySystem
 -- 	end
 -- end
 
+-- Keep full and minimized windows within the game viewport (including dragging).
+local function ClampLunaWindowPosition(window)
+	local viewport = Camera.ViewportSize
+	if viewport.X <= 0 or viewport.Y <= 0 then return end
+	local pos, size = window.AbsolutePosition, window.AbsoluteSize
+	local pad = 6
+	local nx = math.clamp(pos.X, pad, math.max(pad, viewport.X - size.X - pad))
+	local ny = math.clamp(pos.Y, pad, math.max(pad, viewport.Y - size.Y - pad))
+	local dx, dy = nx - pos.X, ny - pos.Y
+	if math.abs(dx) > 0.5 or math.abs(dy) > 0.5 then
+		window.Position = window.Position + UDim2.fromOffset(math.round(dx), math.round(dy))
+	end
+end
+
+local function ClampLunaDragTarget(window, requested)
+	local viewport = Camera.ViewportSize
+	if viewport.X <= 0 or viewport.Y <= 0 then return requested end
+	local pos, size = window.AbsolutePosition, window.AbsoluteSize
+	local dx = requested.X.Offset - window.Position.X.Offset
+	local dy = requested.Y.Offset - window.Position.Y.Offset
+	local pad = 6
+	local nx = math.clamp(pos.X + dx, pad, math.max(pad, viewport.X - size.X - pad))
+	local ny = math.clamp(pos.Y + dy, pad, math.max(pad, viewport.Y - size.Y - pad))
+	return UDim2.new(requested.X.Scale, requested.X.Offset + nx - pos.X - dx, requested.Y.Scale, requested.Y.Offset + ny - pos.Y - dy)
+end
+
 local function Draggable(Bar, Window, enableTaptic, tapticOffset)
 	pcall(function()
 		local Dragging, DragInput, MousePos, FramePos
@@ -2092,10 +2118,13 @@ local function Draggable(Bar, Window, enableTaptic, tapticOffset)
 				local Delta = Input.Position - MousePos
 
 				local newMainPosition = UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
-				TweenService:Create(Window, TweenInfo.new(0.35, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Position = newMainPosition}):Play()
+				if Window == Main then
+					newMainPosition = ClampLunaDragTarget(Window, newMainPosition)
+				end
+				TweenService:Create(Window, TweenInfo.new(0.20, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Position = newMainPosition}):Play()
 
 				if dragBar then
-					local newDragBarPosition = UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y + 240)
+					local newDragBarPosition = UDim2.new(newMainPosition.X.Scale, newMainPosition.X.Offset, newMainPosition.Y.Scale, newMainPosition.Y.Offset + 240)
 					dragBar.Position = newDragBarPosition
 				end
 			end
@@ -2230,8 +2259,10 @@ local function CalculateWindowSizes()
 	local width = math.max(220, math.min(900, viewport.X - marginX))
 	local height = math.max(180, math.min(520, viewport.Y - marginY))
 	MainSize = UDim2.fromOffset(width, height)
-	local minimizedWidth = math.min(width, math.max(220, math.floor(width * 0.65)))
-	MinSize = UDim2.fromOffset(minimizedWidth, minimizedWidth) -- original minimized width is now also its height
+	-- Compact, responsive square instead of 65% of the main window.
+	local shortSide = math.max(1, math.min(viewport.X, viewport.Y))
+	local side = math.clamp(math.floor(shortSide * 0.14), 64, 80)
+	MinSize = UDim2.fromOffset(side, side)
 end
 CalculateWindowSizes()
 
@@ -2288,11 +2319,14 @@ end
 -- Store original visibility rather than destroying controls; restore it on
 -- reopening the UI. This changes only the minimized presentation.
 local MinimizedChildVisibility = setmetatable({}, {__mode = "k"})
+local MinimizedClipping = setmetatable({}, {__mode = "k"})
 local function SetMinimizedPresentation(Window, minimized)
 	local launcher = Window:FindFirstChild("LunaMinimizedLauncher")
 	if not launcher then return end
 	if minimized then
 		if MinimizedChildVisibility[Window] then return end
+		MinimizedClipping[Window] = Window.ClipsDescendants
+		Window.ClipsDescendants = true
 		local prior = {}
 		for _, child in ipairs(Window:GetChildren()) do
 			if child:IsA("GuiObject") and child ~= launcher then
@@ -2311,15 +2345,21 @@ local function SetMinimizedPresentation(Window, minimized)
 			end
 			MinimizedChildVisibility[Window] = nil
 		end
+		if MinimizedClipping[Window] ~= nil then
+			Window.ClipsDescendants = MinimizedClipping[Window]
+			MinimizedClipping[Window] = nil
+		end
 	end
 end
 
 local function Maximise(Window)
 	SetMinimizedPresentation(Window, false)
 	Window.Controls.ToggleSize.ImageLabel.Image = "rbxassetid://10137941941"
-	tween(Window, {Size = MainSize})
 	Window.Elements.Visible = true
 	Window.Navigation.Visible = true
+	tween(Window, {Size = MainSize}, function()
+		ClampLunaWindowPosition(Window)
+	end, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
 end
 
 local function Minimize(Window)
@@ -2327,7 +2367,11 @@ local function Minimize(Window)
 	SetMinimizedPresentation(Window, true)
 	Window.Elements.Visible = false
 	Window.Navigation.Visible = false
-	tween(Window, {Size = MinSize})
+	-- No right-top controls are shown while minimized.
+	Window.Controls.Visible = false
+	tween(Window, {Size = MinSize}, function()
+		ClampLunaWindowPosition(Window)
+	end, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
 end
 
 
@@ -2504,7 +2548,7 @@ function Luna:CreateWindow(WindowSettings)
 	MinimizedEmblem.BorderSizePixel = 0
 	MinimizedEmblem.AnchorPoint = Vector2.new(0.5, 0.5)
 	MinimizedEmblem.Position = UDim2.fromScale(0.5, 0.5)
-	MinimizedEmblem.Size = UDim2.fromScale(0.76, 0.76)
+	MinimizedEmblem.Size = UDim2.fromScale(0.73, 0.73)
 	MinimizedEmblem.ScaleType = Enum.ScaleType.Fit
 	MinimizedEmblem.Image = ResolveMinimizedEmblem(Main.Logo.Image)
 	MinimizedEmblem.ZIndex = 101
@@ -2729,6 +2773,10 @@ function Luna:CreateWindow(WindowSettings)
 
 	TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {BackgroundTransparency = 0.2, Size = MainSize}):Play()
 	TweenService:Create(Main.Parent.ShadowHolder, TweenInfo.new(0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = MainSize}):Play()
+	-- Match the larger content window to the current viewport after opening.
+	task.delay(0.55, function()
+		if Main.Parent and not Window.Size then ClampLunaWindowPosition(Main) end
+	end)
 	TweenService:Create(Main.Title.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
 	TweenService:Create(Main.Title.subtitle, TweenInfo.new(0.35, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
 	TweenService:Create(Main.Logo, TweenInfo.new(0.35, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {ImageTransparency = 0}):Play()
@@ -6931,11 +6979,38 @@ function Luna:CreateWindow(WindowSettings)
 		end
 	end)
 
-	MinimizedLauncher.MouseButton1Click:Connect(function()
+	-- The square is the only minimized control; allow dragging without
+	-- unintentionally reopening the window after a touch movement.
+	local launcherDown, launcherPointer, launcherStart, launcherOrigin
+	local launcherMoved = false
+	MinimizedLauncher.InputBegan:Connect(function(input)
 		if not Window.Size then return end
+		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+		launcherDown = true
+		launcherPointer = input
+		launcherStart = Vector2.new(input.Position.X, input.Position.Y)
+		launcherOrigin = Main.Position
+		launcherMoved = false
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End or input.UserInputState == Enum.UserInputState.Cancel then
+				launcherDown = false
+			end
+		end)
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if not Window.Size or not launcherDown then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input ~= launcherPointer then return end
+		local delta = Vector2.new(input.Position.X, input.Position.Y) - launcherStart
+		if delta.Magnitude > 9 then launcherMoved = true end
+		if not launcherMoved then return end
+		local request = UDim2.new(launcherOrigin.X.Scale, launcherOrigin.X.Offset + delta.X, launcherOrigin.Y.Scale, launcherOrigin.Y.Offset + delta.Y)
+		Main.Position = ClampLunaDragTarget(Main, request)
+	end)
+	MinimizedLauncher.MouseButton1Click:Connect(function()
+		if not Window.Size or launcherMoved then return end
 		Window.Size = false
 		Maximise(Main)
-		dragBar.Visible = true
+		if dragBar then dragBar.Visible = true end
 	end)
 
 	Main.Controls.ToggleSize.ImageLabel.MouseButton1Click:Connect(function()
