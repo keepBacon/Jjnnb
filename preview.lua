@@ -1,14 +1,17 @@
 -- Luna UI / Right-side dual-column layout preview
 -- Loads the modified source.lua from this repository.
 -- This URL requires the repository to be PUBLIC for anonymous HttpGet.
-local Luna = loadstring(game:HttpGet(
+local raw = game:HttpGet(
     "https://raw.githubusercontent.com/keepBacon/Jjnnb/main/source.lua",
     true
-))()
+)
+assert(type(raw) == "string" and raw:find("jjnnb-luna-rootfix-20261028-r1", 1, true), "Old Luna source loaded. Clear executor HTTP cache and reload.")
+local Luna = assert(loadstring(raw))()
+print("[Jjnnb Preview] " .. tostring(Luna.BuildId))
 
 local Window = Luna:CreateWindow({
-    Name = "Luna UI · Dual Column",
-    Subtitle = "Right Panel Preview",
+    Name = "Luna ROOTFIX r2 · Dual Column",
+    Subtitle = "Responsive Colors | Independent Launcher",
     LoadingEnabled = false,
     KeySystem = false,
     ContentLayout = {
