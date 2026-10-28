@@ -2230,11 +2230,92 @@ local function CalculateWindowSizes()
 	local width = math.max(220, math.min(900, viewport.X - marginX))
 	local height = math.max(180, math.min(520, viewport.Y - marginY))
 	MainSize = UDim2.fromOffset(width, height)
-	MinSize = UDim2.fromOffset(math.min(width, math.max(220, math.floor(width * 0.65))), 42)
+	local minimizedWidth = math.min(width, math.max(220, math.floor(width * 0.65)))
+	MinSize = UDim2.fromOffset(minimizedWidth, minimizedWidth) -- original minimized width is now also its height
 end
 CalculateWindowSizes()
 
+
+-- The supplied metallic emblem is embedded, so the modified source remains
+-- self-contained. File-based custom images require executor-specific APIs.
+local LUNA_MINIMIZED_EMBLEM_BASE64 = "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"
+local minimizedLogoCache = nil
+
+local function LunaDecodeImageBase64(input)
+	local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	local lookup = {}
+	for i = 1, #alphabet do
+		lookup[alphabet:sub(i, i)] = i - 1
+	end
+	local output = {}
+	for pos = 1, #input, 4 do
+		local a = lookup[input:sub(pos, pos)] or 0
+		local b = lookup[input:sub(pos + 1, pos + 1)] or 0
+		local c = lookup[input:sub(pos + 2, pos + 2)] or 0
+		local d = lookup[input:sub(pos + 3, pos + 3)] or 0
+		local code = a * 262144 + b * 4096 + c * 64 + d
+		output[#output + 1] = string.char(math.floor(code / 65536) % 256)
+		if input:sub(pos + 2, pos + 2) ~= "=" then
+			output[#output + 1] = string.char(math.floor(code / 256) % 256)
+		end
+		if input:sub(pos + 3, pos + 3) ~= "=" then
+			output[#output + 1] = string.char(code % 256)
+		end
+	end
+	return table.concat(output)
+end
+
+local function ResolveMinimizedEmblem(fallback)
+	if minimizedLogoCache then return minimizedLogoCache end
+	local customAsset = getcustomasset or getsynasset
+	if type(customAsset) ~= "function" or type(writefile) ~= "function" then
+		return fallback
+	end
+	local iconPath = "Luna_Minimized_Emblem_v1.png"
+	local ok, asset = pcall(function()
+		if type(isfile) ~= "function" or not isfile(iconPath) then
+			writefile(iconPath, LunaDecodeImageBase64(LUNA_MINIMIZED_EMBLEM_BASE64))
+		end
+		return customAsset(iconPath)
+	end)
+	if ok and type(asset) == "string" and #asset > 0 then
+		minimizedLogoCache = asset
+		return asset
+	end
+	return fallback
+end
+
+-- Store original visibility rather than destroying controls; restore it on
+-- reopening the UI. This changes only the minimized presentation.
+local MinimizedChildVisibility = setmetatable({}, {__mode = "k"})
+local function SetMinimizedPresentation(Window, minimized)
+	local launcher = Window:FindFirstChild("LunaMinimizedLauncher")
+	if not launcher then return end
+	if minimized then
+		if MinimizedChildVisibility[Window] then return end
+		local prior = {}
+		for _, child in ipairs(Window:GetChildren()) do
+			if child:IsA("GuiObject") and child ~= launcher then
+				prior[child] = child.Visible
+				child.Visible = false
+			end
+		end
+		MinimizedChildVisibility[Window] = prior
+		launcher.Visible = true
+	else
+		launcher.Visible = false
+		local prior = MinimizedChildVisibility[Window]
+		if prior then
+			for child, visible in pairs(prior) do
+				if child.Parent == Window then child.Visible = visible end
+			end
+			MinimizedChildVisibility[Window] = nil
+		end
+	end
+end
+
 local function Maximise(Window)
+	SetMinimizedPresentation(Window, false)
 	Window.Controls.ToggleSize.ImageLabel.Image = "rbxassetid://10137941941"
 	tween(Window, {Size = MainSize})
 	Window.Elements.Visible = true
@@ -2243,6 +2324,7 @@ end
 
 local function Minimize(Window)
 	Window.Controls.ToggleSize.ImageLabel.Image = "rbxassetid://11036884234"
+	SetMinimizedPresentation(Window, true)
 	Window.Elements.Visible = false
 	Window.Navigation.Visible = false
 	tween(Window, {Size = MinSize})
@@ -2402,6 +2484,32 @@ function Luna:CreateWindow(WindowSettings)
 	Main.Title.Title.Text = WindowSettings.Name
 	Main.Title.subtitle.Text = WindowSettings.Subtitle
 	Main.Logo.Image = "rbxassetid://" .. WindowSettings.LogoID
+
+	-- Full-square reopen target; its only visible child is the centered emblem.
+	local MinimizedLauncher = Instance.new("ImageButton")
+	MinimizedLauncher.Name = "LunaMinimizedLauncher"
+	MinimizedLauncher.BackgroundTransparency = 1
+	MinimizedLauncher.BorderSizePixel = 0
+	MinimizedLauncher.Size = UDim2.fromScale(1, 1)
+	MinimizedLauncher.Position = UDim2.fromScale(0, 0)
+	MinimizedLauncher.Image = ""
+	MinimizedLauncher.AutoButtonColor = false
+	MinimizedLauncher.ZIndex = 100
+	MinimizedLauncher.Visible = false
+	MinimizedLauncher.Parent = Main
+
+	local MinimizedEmblem = Instance.new("ImageLabel")
+	MinimizedEmblem.Name = "Emblem"
+	MinimizedEmblem.BackgroundTransparency = 1
+	MinimizedEmblem.BorderSizePixel = 0
+	MinimizedEmblem.AnchorPoint = Vector2.new(0.5, 0.5)
+	MinimizedEmblem.Position = UDim2.fromScale(0.5, 0.5)
+	MinimizedEmblem.Size = UDim2.fromScale(0.76, 0.76)
+	MinimizedEmblem.ScaleType = Enum.ScaleType.Fit
+	MinimizedEmblem.Image = ResolveMinimizedEmblem(Main.Logo.Image)
+	MinimizedEmblem.ZIndex = 101
+	MinimizedEmblem.Parent = MinimizedLauncher
+
 	Main.Visible = true
 	Main.BackgroundTransparency = 1
 	Main.Size = MainSize
@@ -6821,6 +6929,13 @@ function Luna:CreateWindow(WindowSettings)
 			tween(Elements.Parent, {Size = UDim2.new(1, -205, Elements.Parent.Size.Y.Scale, Elements.Parent.Size.Y.Offset)})
 			tween(Navigation, {Size = UDim2.new(Navigation.Size.X.Scale, 205, Navigation.Size.Y.Scale, Navigation.Size.Y.Offset)})
 		end
+	end)
+
+	MinimizedLauncher.MouseButton1Click:Connect(function()
+		if not Window.Size then return end
+		Window.Size = false
+		Maximise(Main)
+		dragBar.Visible = true
 	end)
 
 	Main.Controls.ToggleSize.ImageLabel.MouseButton1Click:Connect(function()
