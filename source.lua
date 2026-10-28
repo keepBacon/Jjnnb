@@ -6306,7 +6306,11 @@ function Luna:CreateWindow(WindowSettings)
 			ColorPicker.Name = ColorPickerSettings.Name
 			ColorPicker.Title.Text = ColorPickerSettings.Name
 			ColorPicker.Visible = true
-			ContentMount:Item(ColorPicker)
+			if ColorPickerSettings.FullWidth then
+				ContentMount:Full(ColorPicker)
+			else
+				ContentMount:Item(ColorPicker)
+			end
 			ColorPicker.Size = UDim2.new(1, -8, 0, 46)
 			Background.Size = closedsize
 			Display.BackgroundTransparency = 0
@@ -6808,27 +6812,30 @@ function Luna:CreateWindow(WindowSettings)
 
 			local c1cp = Tab:CreateColorPicker({
 				Name = "Color 1",
+				FullWidth = true,
 				Color = Color3.fromRGB(117, 164, 206),
 			}, "LunaInterfaceSuitePrebuiltCPC1") -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
 
 			local c2cp = Tab:CreateColorPicker({
 				Name = "Color 2",
+				FullWidth = true,
 				Color = Color3.fromRGB(123, 201, 201),
 			}, "LunaInterfaceSuitePrebuiltCPC2")
 
 			local c3cp = Tab:CreateColorPicker({
 				Name = "Color 3",
+				FullWidth = true,
 				Color = Color3.fromRGB(224, 138, 184),
 			}, "LunaInterfaceSuitePrebuiltCPC3")
 
 			-- A fourth, balanced card previews the current three-stop gradient.
 			local preview = Instance.new("Frame")
 			preview.Name = "Gradient Preview"
-			preview.Size = UDim2.new(1, -8, 0, 46)
+			preview.Size = UDim2.new(1, -8, 0, 54)
 			preview.BackgroundColor3 = Color3.fromRGB(32, 30, 38)
 			preview.BackgroundTransparency = 0.4
 			preview.BorderSizePixel = 0
-			ContentMount:Item(preview)
+			ContentMount:Full(preview)
 			local corner = Instance.new("UICorner")
 			corner.CornerRadius = UDim.new(0, 7)
 			corner.Parent = preview
